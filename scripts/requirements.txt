@@ -2,3 +2,4 @@ simple-term-menu==1.6.1
 boto3>=1.15
 termcolor==2.2.0
 alive-progress==3.1.0
+click==8.1.3

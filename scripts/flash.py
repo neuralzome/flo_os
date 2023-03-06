@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (C) 2023 FloMobility Pvt. Ltd.
 # All rights reserved.
@@ -42,8 +44,9 @@ s3 = boto3.client(
 
 BUCKET_NAME = "flo-os-release-builds"
 
+
 def download_file(url, filename):
-    with alive.alive_bar(spinner='dots_waves2') as bar:
+    with alive.alive_bar() as bar:
         def progress(count, block_size, total_size):
             bar()
         request.urlretrieve(url, filename, progress)
@@ -69,6 +72,9 @@ def check_platform_tools():
 
 
 def populate_and_select_os_versions():
+    if not os.path.exists("builds"):
+        os.mkdir("builds")
+
     s3.download_file(
         Bucket=FLO_OS_RELEASES_BUCKET_NAME,
         Key="manifest",
@@ -82,9 +88,11 @@ def populate_and_select_os_versions():
     selected_version_index = terminal_menu.show()
     return versions[selected_version_index]
 
+
 def check_for_local_build(version):
     file_name = f"{version}.zip"
     return os.path.isfile(f"builds/{file_name}")
+
 
 def download_flo_build(version):
     file_name = f"{version}.zip"
@@ -94,9 +102,10 @@ def download_flo_build(version):
     )
     total_size = build_file_data["ContentLength"]
     logger.info(f'Downloading Flo OS : {version} ...')
-    with alive.alive_bar(spinner='dots_waves2', manual=True) as bar:
+    with alive.alive_bar(manual=True) as bar:
         global bytes_seen
         bytes_seen = 0
+
         def progress(bytes):
             # print(f"Downloaded {bytes} bytes so far")
             global bytes_seen
@@ -111,7 +120,16 @@ def download_flo_build(version):
     logger.info(f'Done.')
 
 
-def flash_flo_build(version):
+def flash_flo_build(version, wipe):
+    if wipe:
+        logger.info("Proceeding to perform a factory reset.")
+        if PLATFORM == "windows":
+            subprocess.run(['platform-tools\\fastboot.exe',
+                            '-w'])
+        else:
+            subprocess.run(['./platform-tools/fastboot', '-w'])
+        logger.info("Factory reset done!")
+
     file_name = f"builds/{version}.zip"
     logger.info('Flashing Flo build via fastboot...')
     if PLATFORM == "windows":
@@ -129,15 +147,18 @@ def adb_reboot_bootloader():
     else:
         subprocess.run(['./platform-tools/adb', 'reboot', 'bootloader'])
 
-@click.command()
-def main():
 
+@click.command()
+@click.option('--wipe', is_flag=True, help='Performs a factory reset.')
+def main(wipe):
     """
     Prerequisities are :
-    
+
     1. AWS User credentials.
-    
+
     2. Access to flo release bundles s3 bucket
+
+    3. Make sure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME env variables are added before running this script
     """
 
     # Download platform tools
@@ -157,7 +178,7 @@ def main():
     else:
         ret = subprocess.run(
             ['./platform-tools/fastboot', "devices"], capture_output=True)
-    
+
     in_fastboot = False
     if "fastboot" in ret.stdout.decode().rstrip().split("\t"):
         in_fastboot = True
@@ -174,14 +195,14 @@ def main():
     if not in_fastboot:
         if "device" not in ret.stdout.decode():
             logger.error(
-            'Device not found in ADB mode, please connect the device in ADB mode with the bootloader unlocked.')
+                'Device not found in ADB mode, please connect the device in ADB mode with the bootloader unlocked.')
             exit(1)
         else:
             # Reboot into bootloader
             adb_reboot_bootloader()
 
     # Flash Flo build via fastboot
-    flash_flo_build(version)
+    flash_flo_build(version, wipe)
 
 
 if __name__ == '__main__':

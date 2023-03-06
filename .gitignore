@@ -1,5 +1,5 @@
 *.swp
 *.DS_Store
-/scripts/builds
-/scripts/platform-tools
+builds/
+platform-tools/
 __pycache__
