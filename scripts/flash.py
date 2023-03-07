@@ -14,6 +14,7 @@ import sys
 import subprocess
 import platform
 import urllib.request as request
+import shutil
 
 import click
 import boto3
@@ -33,7 +34,7 @@ AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME")
 FLO_OS_RELEASES_BUCKET_NAME = "flo-os-release-bundles"
 
 if AWS_ACCESS_KEY_ID == None or AWS_SECRET_ACCESS_KEY == None or AWS_S3_REGION_NAME == None:
-    print("Missing aws configuration. Check your env variables for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME")
+    logger.error("Missing aws configuration. Check your env variables for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME")
     sys.exit(1)
 
 s3 = boto3.client(
@@ -53,7 +54,7 @@ def download_file(url, filename):
 
 
 def unzip_platform_tools():
-    print('Unzipping platform tools...')
+    logger.info('Unzipping platform tools...')
     if PLATFORM == "windows":
         subprocess.run(['powershell.exe', '-Command',
                        'Expand-Archive -Path platform-tools.zip -DestinationPath .'])
@@ -107,7 +108,7 @@ def download_flo_build(version):
         bytes_seen = 0
 
         def progress(bytes):
-            # print(f"Downloaded {bytes} bytes so far")
+            # logger.info(f"Downloaded {bytes} bytes so far")
             global bytes_seen
             bytes_seen = bytes_seen + bytes
             percent = (bytes_seen / total_size)
@@ -122,13 +123,7 @@ def download_flo_build(version):
 
 def flash_flo_build(version, wipe):
     if wipe:
-        logger.info("Proceeding to perform a factory reset.")
-        if PLATFORM == "windows":
-            subprocess.run(['platform-tools\\fastboot.exe',
-                            '-w'])
-        else:
-            subprocess.run(['./platform-tools/fastboot', '-w'])
-        logger.info("Factory reset done!")
+        factory_reset()
 
     file_name = f"builds/{version}.zip"
     logger.info('Flashing Flo build via fastboot...')
@@ -141,16 +136,30 @@ def flash_flo_build(version, wipe):
 
 
 def adb_reboot_bootloader():
-    print('Rebooting into bootloader...')
+    logger.info('Rebooting into bootloader...')
     if PLATFORM == "windows":
         subprocess.run(['platform-tools\\adb.exe', 'reboot', 'bootloader'])
     else:
         subprocess.run(['./platform-tools/adb', 'reboot', 'bootloader'])
 
+def factory_reset():
+    logger.info("Proceeding to perform a factory reset.")
+    if PLATFORM == "windows":
+            subprocess.run(['platform-tools\\fastboot.exe',
+                            '-w'])
+    else:
+        subprocess.run(['./platform-tools/fastboot', '-w'])
+    logger.info("Factory reset done!")
+
+def cleanup():
+    if os.path.exists("builds"):
+        shutil.rmtree("builds")
 
 @click.command()
 @click.option('--wipe', is_flag=True, help='Performs a factory reset.')
-def main(wipe):
+@click.option('--flash', is_flag=True, help='Flashes the OS.')
+@click.option('--clear-cache', is_flag=True, help='Clears builds directory')
+def main(wipe, flash, clear_cache):
     """
     Prerequisities are :
 
@@ -160,6 +169,10 @@ def main(wipe):
 
     3. Make sure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME env variables are added before running this script
     """
+
+    if(clear_cache):
+        cleanup()
+        return
 
     # Download platform tools
     check_platform_tools()
@@ -201,8 +214,9 @@ def main(wipe):
             # Reboot into bootloader
             adb_reboot_bootloader()
 
-    # Flash Flo build via fastboot
-    flash_flo_build(version, wipe)
+    if(flash):
+        # Flash Flo build via fastboot
+        flash_flo_build(version, wipe)
 
 
 if __name__ == '__main__':
