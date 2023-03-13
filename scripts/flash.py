@@ -82,7 +82,7 @@ def populate_and_select_os_versions():
         Filename="builds/manifest")
     with open('builds/manifest') as f:
         versions = f.read()
-        versions = versions.split("\n")
+        versions = versions.rstrip().split("\n")
     terminal_menu = TerminalMenu(
         menu_entries=versions,
         title="Available versions of Flo OS")
