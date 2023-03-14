@@ -29,6 +29,7 @@
 5. Verify if sideload is active by `adb devices`. Sideload would be listed
 6. Now execute `adb sideload flo-os-<latest release name>-<device codename>.zip`. (Select `yes` incase signature verification failed)
 7. After the installation is done, execute `adb sideload Magisk-v24.1.zip`. (Select `yes` incase signature verification failed)
+ > Note : If you need google services like maps etc, download and flash [OpenGapps](https://drive.google.com/file/d/1nV0JPG52ATAn0tCMJchcyEUsiG2mIZgB/view?usp=share_link)
 8. Once this is done. Proceed back to main menu
 9. Reboot system now
 
