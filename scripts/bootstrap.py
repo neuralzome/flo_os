@@ -279,7 +279,7 @@ function bootup {
     done
 
     echo "Found /sdcard/linux.img after $COUNTER secs" 
-    /data/data/ru.meefik.linuxdeploy/files/bin/linuxdeploy -d start -m
+    /data/data/ru.meefik.linuxdeploy/files/bin/linuxdeploy -dt start -m
     
     ps -A | grep ssh
 
@@ -397,7 +397,7 @@ def remote_setup(setup_fs, setup_ssh, secure_adb):
         file_system_name = populate_and_select_file_systems()
 
         download_fs_config(file_system_name)
-        # download_file_system(file_system)
+        download_file_system(file_system_name)
 
         # 1. Push config File
         config_file = f"{LOCAL_SETUP_DIR}/{file_system_name}.conf"
@@ -456,7 +456,7 @@ def cli():
 
     2. For local based file system setup, the file system must be a .tar.gz file.
 
-    3. To setup ssh and secure_adb, as of now it's only possible with remote_setup
+    3. To setup ssh and secure_adb, as of now it's only possible with remote
     """
     pass
 
