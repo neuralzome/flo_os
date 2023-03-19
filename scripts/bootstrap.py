@@ -208,7 +208,7 @@ def download_file_system(file_system_name):
     logger.info('Done.')
 
 def push_config_file(file_name):
-    adb_shell(f"mkdir {PATH_TO_CONFIG_FILES}")
+    adb_shell(f"mkdir -p {PATH_TO_CONFIG_FILES}")
     logger.info("Uploading config file ...")
     adb("push", file_name, f"{PATH_TO_CONFIG_FILES}/linux.conf")
     adb_shell(f"chown -R {get_owner_group()} {ANX_APP_ROOT_FOLDER_PATH}")
