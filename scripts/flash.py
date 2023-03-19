@@ -260,6 +260,9 @@ def factory_reset():
 
     6. recovery
     """
+    # Download platform tools
+    check_platform_tools()
+    
     fastboot_ok = wait_for_fastboot_device()
     if not fastboot_ok:
         sys.exit(1)
@@ -298,6 +301,9 @@ def flash_local(wipe, reboot, os_zip_file):
     The zip file must contain all partition image files (.img) with the filename as the partition name.
 
     """
+    # Download platform tools
+    check_platform_tools()
+
     fastboot_ok = wait_for_fastboot_device()
     if not fastboot_ok:
         sys.exit(1)
