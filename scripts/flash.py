@@ -31,7 +31,7 @@ import logger
 PLATFORM_TOOLS_VERSION = "r34.0.0"
 PLATFORM = platform.uname().system.lower()
 PLATFORM_TOOLS_URL = f"https://dl.google.com/android/repository/platform-tools_{PLATFORM_TOOLS_VERSION}-{PLATFORM}.zip"
-PLATFORM_TOOLS_PATH=f"{os.getcwd()}/platform-tools"
+PLATFORM_TOOLS_PATH = f"{os.getcwd()}/platform-tools"
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -40,7 +40,8 @@ AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME")
 FLO_OS_RELEASES_BUCKET_NAME = "flo-os-release-bundles"
 
 if AWS_ACCESS_KEY_ID == None or AWS_SECRET_ACCESS_KEY == None or AWS_S3_REGION_NAME == None:
-    logger.error("Missing aws configuration. Check your env variables for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME")
+    logger.error(
+        "Missing aws configuration. Check your env variables for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME")
     sys.exit(1)
 
 s3 = boto3.client(
@@ -58,8 +59,10 @@ else:
     FASTBOOT = f"{PLATFORM_TOOLS_PATH}/fastboot"
     ADB = f"{PLATFORM_TOOLS_PATH}/adb"
 
+
 def fastboot(cmd, *args):
     return subprocess.run([FASTBOOT, cmd] + list(args))
+
 
 def download_file(url, filename):
     with alive.alive_bar() as bar:
@@ -135,29 +138,34 @@ def download_flo_build(version):
             Callback=progress)
     logger.info(f'Done.')
 
+
 def flash_partition(partition_name, img_file):
     return fastboot("flash", partition_name, img_file)
 
-def flash_flo_build(file_name, wipe):
+
+def flash_flo_build(file_name, wipe) -> bool:
     """Flashes flo os build via fastboot
 
     Arguments:
         file_name -- a .zip file
         wipe -- flag to perform factory reset
-    """
 
-    # if wipe:
-    #     factory_reset()
+    Returns:
+        True if successful
+    """
+    if wipe:
+        factory_reset()
     dir_name = file_name.split(".zip")[0]
     dir_name = os.path.join(os.getcwd(), os.path.abspath(dir_name))
     file_name = os.path.abspath(file_name)
     # unzip file
     if PLATFORM == "windows":
         ret = subprocess.run(['powershell.exe', '-Command',
-                       f'Expand-Archive -Path {file_name} -DestinationPath .\\{dir_name}'], capture_output=True)
+                              f'Expand-Archive -Path {file_name} -DestinationPath .\\{dir_name}'], capture_output=True)
     else:
-        ret = subprocess.run(['unzip', file_name, f"-d{dir_name}"], capture_output=True)
-    
+        ret = subprocess.run(
+            ['unzip', file_name, f"-d{dir_name}"], capture_output=True)
+
     if ret.returncode != 0:
         logger.error(ret.stderr.decode())
         sys.exit(ret.returncode)
@@ -167,10 +175,13 @@ def flash_flo_build(file_name, wipe):
     for file in os.listdir(dir_name):
         if image_file_pattern.match(file):
             partition_name = file.split(".img")[0]
-            logger.debug(f"{partition_name, os.path.join(dir_name, file)}")
+            logger.info(f"Flashing {file} into {partition_name} partition")
             ret = flash_partition(partition_name, os.path.join(dir_name, file))
             if ret.returncode != 0:
-                logger.error(f"Failed flashing {partition_name} : {ret.stderr.decode()}")
+                logger.error(
+                    f"Failed flashing {partition_name} : {ret.stderr.decode()}")
+
+    return True
 
 
 def adb_reboot_bootloader():
@@ -181,12 +192,15 @@ def adb_reboot_bootloader():
         return
     logger.info("Done.")
 
+
 def in_fastboot():
     try:
-        ret = subprocess.run([FASTBOOT, "devices"], capture_output=True, timeout=3)
+        ret = subprocess.run([FASTBOOT, "devices"],
+                             capture_output=True, timeout=3)
         return "fastboot" in ret.stdout.decode().rstrip().split("\t")
     except subprocess.TimeoutExpired:
         return False
+
 
 def wait_for_fastboot_device():
     logger.info("Checking if device is in fastboot ...")
@@ -194,7 +208,8 @@ def wait_for_fastboot_device():
         logger.info("Device found in fastboot mode.")
         return True
 
-    logger.warn("Couldn't find device in fastboot mode. Will try to reboot via adb.")
+    logger.warn(
+        "Couldn't find device in fastboot mode. Will try to reboot via adb.")
     # Check if the device is connected via ADB
     logger.info('Checking if the device is connected via ADB...')
     ret = subprocess.run([ADB, "get-state"], capture_output=True, timeout=5)
@@ -204,7 +219,7 @@ def wait_for_fastboot_device():
             'Device not found in ADB mode.')
         logger.warn("Check if device is switched on.")
         return False
-    
+
     # Reboot into bootloader
     adb_reboot_bootloader()
 
@@ -218,7 +233,7 @@ def wait_for_fastboot_device():
             return True
         time.sleep(1)
         counter += 1
-    
+
     logger.error("Couldn't identify if device in fastboot mode.")
     logger.warn("Some troubleshooting steps :")
     logger.warn("1. Try reconnecting the device.")
@@ -226,26 +241,43 @@ def wait_for_fastboot_device():
     logger.warn("3. Device could be faulty. <|-_-|>. Don't blame the software!!")
     return False
 
+
 @click.command(name="factory_reset")
 def factory_reset():
-    """Performs a factory reset."""
+    """Performs a factory reset.
+    
+    Erases the following partitions:
+
+    1. userdata
+    
+    2. cache
+
+    3. system
+
+    4. vendor
+
+    5. boot
+
+    6. recovery
+    """
     fastboot_ok = wait_for_fastboot_device()
     if not fastboot_ok:
         sys.exit(1)
     logger.info("Proceeding to perform a factory reset.")
     if PLATFORM == "windows":
-        subprocess.run(['platform-tools\\fastboot.exe','-w'])
-        subprocess.run(['platform-tools\\fastboot.exe','erase','system'])
-        subprocess.run(['platform-tools\\fastboot.exe','erase','vendor'])
-        subprocess.run(['platform-tools\\fastboot.exe','erase','boot'])
-        subprocess.run(['platform-tools\\fastboot.exe','erase','recovery'])
+        subprocess.run(['platform-tools\\fastboot.exe', '-w'])
+        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'system'])
+        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'vendor'])
+        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'boot'])
+        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'recovery'])
     else:
         subprocess.run(['./platform-tools/fastboot', '-w'])
-        subprocess.run(['./platform-tools/fastboot','erase', 'system'])
-        subprocess.run(['./platform-tools/fastboot','erase', 'vendor'])
-        subprocess.run(['./platform-tools/fastboot','erase', 'boot'])
-        subprocess.run(['./platform-tools/fastboot','erase', 'recovery'])
+        subprocess.run(['./platform-tools/fastboot', 'erase', 'system'])
+        subprocess.run(['./platform-tools/fastboot', 'erase', 'vendor'])
+        subprocess.run(['./platform-tools/fastboot', 'erase', 'boot'])
+        subprocess.run(['./platform-tools/fastboot', 'erase', 'recovery'])
     logger.info("Factory reset done!")
+
 
 @click.command(name="clean")
 def cleanup():
@@ -253,12 +285,14 @@ def cleanup():
     if os.path.exists("builds"):
         shutil.rmtree("builds")
 
+
 @click.command(name="local")
 @click.argument("os_zip_file")
-@click.option('--wipe', is_flag=True, help='Performs a factory reset.')
-def flash_local(wipe, os_zip_file):
+@click.option('--wipe', '-w', is_flag=True, help='Performs a factory reset and flash OS.')
+@click.option('--reboot', '-r', is_flag=True, help='Reboots after opertation is succesful')
+def flash_local(wipe, reboot, os_zip_file):
     """Flash a local version of Flo OS.
-    
+
     Pass the path to the zip file containing all partitions as an argument.
 
     The zip file must contain all partition image files (.img) with the filename as the partition name.
@@ -267,13 +301,16 @@ def flash_local(wipe, os_zip_file):
     fastboot_ok = wait_for_fastboot_device()
     if not fastboot_ok:
         sys.exit(1)
-    
-    flash_flo_build(os_zip_file, wipe)
-    
+
+    success = flash_flo_build(os_zip_file, wipe)
+    if success and reboot:
+        fastboot("reboot")
+
 
 @click.command(name="remote")
-@click.option('--wipe', is_flag=True, help='Performs a factory reset.')
-def flash_remote(wipe):
+@click.option('--wipe', '-w', is_flag=True, help='Performs a factory reset and flash OS.')
+@click.option('--reboot', '-r', is_flag=True, help='Reboots after opertation is succesful')
+def flash_remote(wipe, reboot):
     """Download and flash a version of Flo OS"""
 
     # Download platform tools
@@ -290,27 +327,33 @@ def flash_remote(wipe):
     fastboot_ok = wait_for_fastboot_device()
     if not fastboot_ok:
         sys.exit(1)
-    
+
     # Flash Flo build via fastboot
     file_name = f"builds/{version}.zip"
-    flash_flo_build(file_name, wipe)
+    success = flash_flo_build(file_name, wipe)
+    if success and reboot:
+        fastboot("reboot")
+
 
 @click.group()
+@click.version_option(version="", message=f"Flo OS flash utility : {VERSION}")
 def cli():
-    """Flo OS flash utility (v0.1.0)
-    
+    """Flo OS flash utility
+
     Important points:
 
     1. To download and flash flo OS builds, make sure you have :
 
     - AWS bucket access
-    
+
     - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME env variables sourced
 
     2. For local builds, the zip file must contain all partition image files (.img) with the filename as the partition name.
 
     3. If you're using a beryllium (Xiaomi Poco F1) device, USB 2.0 port might cause a problem, be sure to use a USB Hub.
     """
+    pass
+
 
 cli.add_command(flash_remote)
 cli.add_command(flash_local)
