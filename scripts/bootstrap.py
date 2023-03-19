@@ -397,7 +397,7 @@ def remote_setup(setup_fs, setup_ssh, secure_adb):
         file_system_name = populate_and_select_file_systems()
 
         download_fs_config(file_system_name)
-        # download_file_system(file_system)
+        download_file_system(file_system_name)
 
         # 1. Push config File
         config_file = f"{LOCAL_SETUP_DIR}/{file_system_name}.conf"
