@@ -43,7 +43,7 @@ FLO_OS_SETUP_BUCKET_NAME = "flo-os-setup"
 
 LOCAL_SETUP_DIR = "setup"
 SSH_SETUP = "ssh_setup"
-ADB_SETUP = "adb_setup"
+ADB_SETUP = "adb_keys"
 
 if AWS_ACCESS_KEY_ID == None or AWS_SECRET_ACCESS_KEY == None or AWS_S3_REGION_NAME == None:
     logger.error("Missing aws configuration. Check your env variables for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME")
@@ -159,7 +159,13 @@ def download_ssh_setup():
     logger.info("Done.")
 
 def download_adb_setup():
-    pass
+    logger.info(f"Downloading adb setup files ...")
+    file_name = f"{ADB_SETUP}.zip"
+    s3.download_file(
+        Bucket=FLO_OS_SETUP_BUCKET_NAME,
+        Key=file_name,
+        Filename=f"{LOCAL_SETUP_DIR}/{file_name}")
+    logger.info("Done.")
 
 def download_fs_config(file_system_name):
     logger.info(f"Downloading {file_system_name} config ...")
@@ -232,12 +238,23 @@ def do_ssh_setup():
     adb_shell("chmod 660 /data/ssh/sshd_config")
     adb_shell("chmod 751 /.ssh/")
 
+    adb_shell(f"rm -r {SSH_SETUP}")
+
+def do_adb_setup():
+    logger.info("Uploading adb keys to device ...")
+    adb("push", f"{LOCAL_SETUP_DIR}/{ADB_SETUP}.zip", "/")
+    adb_shell("unzip", f"{ADB_SETUP}.zip")
+    adb_shell("rm", f"{ADB_SETUP}.zip")
+
+    adb_shell(f"mv adb_keys /data/misc/adb")
+    logger.info("Done.")
+
 def get_owner_group():
     ret = subprocess.run([ADB, "shell", f"ls -dl {ANX_APP_FOLDER_PATH}"+"| awk '{print $3}'"], capture_output=True)
     owner = ret.stdout.decode().rstrip()
     return owner
 
-def create_boot_up_script(ssh_setup, secure_adb):
+def create_boot_up_script(ssh_setup):
     # create bootup.sh
     with open(f"{LOCAL_SETUP_DIR}/flo_edge_bootup.rc", "w") as script:
         script.write('service flo_edge_bootup /system/bin/bootup.sh\n')
@@ -344,6 +361,11 @@ def local_setup(filesystem_path, filesystem_config_path):
     # 3.2 run `$LINUX_DEPLOY deploy`
     setup_chroot_env()
 
+    logger.info("Flo Edge Setup complete!")
+    logger.info("Rebooting in 5s...")
+    time.sleep(5)
+    adb("reboot")
+
 @click.command(name="clean")
 def clean():
     """Clears setup directory"""
@@ -356,7 +378,7 @@ def clean():
 @click.option('--setup-fs', '-f', is_flag=True, help='Download a file system upload it to your Flo Edge')
 @click.option('--setup-ssh', '-s', is_flag=True, help='Sets up openssh-server on your Flo Edge ')
 @click.option('--secure-adb', '-a', is_flag=True, help='Sets up adb keys on your Flo Edge and secures it.')
-def remote_setup(setup_fs, ssh_setup, secure_adb):
+def remote_setup(setup_fs, setup_ssh, secure_adb):
     """
     Download and setup a file system.
 
@@ -391,27 +413,16 @@ def remote_setup(setup_fs, ssh_setup, secure_adb):
         # 4. wait for installation to finish
 
     # 5. run adb ssh setup
-    if(ssh_setup):
+    if setup_ssh:
         download_ssh_setup()
         do_ssh_setup()
 
     # 6. Copy adb keys
     if(secure_adb):
         download_adb_setup()
-        logger.info("Uploading adb keys to device ...")
-        adb_shell("cp adb_keys /data/misc/adb")
-        logger.info("Done.")
+        do_adb_setup()
 
-    create_boot_up_script(ssh_setup, secure_adb)
-    
-    # cleanup
-    # ssh setup
-    if(ssh_setup):
-        adb_shell(f"rm -r {SSH_SETUP}")
-    
-    # adb setup
-    if(secure_adb):
-        adb_shell(f"rm -r {ADB_SETUP}")
+    create_boot_up_script(setup_ssh)
 
     # set it back to read-only fs
     adb_shell("umount /")
