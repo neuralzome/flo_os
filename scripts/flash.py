@@ -167,7 +167,7 @@ def flash_flo_build(file_name, wipe) -> bool:
                               f'Expand-Archive -Path {file_name} -DestinationPath .\\{dir_name}'], capture_output=True)
     else:
         ret = subprocess.run(
-            ['unzip', file_name, f"-od{dir_name}"], capture_output=True)
+            ['unzip', "-o", file_name, f"-d{dir_name}"], capture_output=True)
 
     if ret.returncode != 0:
         logger.error(ret.stderr.decode())
@@ -254,18 +254,11 @@ def perform_factory_reset():
     if not fastboot_ok:
         sys.exit(1)
     logger.info("Proceeding to perform a factory reset.")
-    if PLATFORM == "windows":
-        subprocess.run(['platform-tools\\fastboot.exe', '-w'])
-        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'system'])
-        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'vendor'])
-        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'boot'])
-        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'recovery'])
-    else:
-        subprocess.run(['./platform-tools/fastboot', '-w'])
-        subprocess.run(['./platform-tools/fastboot', 'erase', 'system'])
-        subprocess.run(['./platform-tools/fastboot', 'erase', 'vendor'])
-        subprocess.run(['./platform-tools/fastboot', 'erase', 'boot'])
-        subprocess.run(['./platform-tools/fastboot', 'erase', 'recovery'])
+    fastboot('-w')
+    fastboot('erase', 'system')
+    fastboot('erase', 'vendor')
+    fastboot('erase', 'boot')
+    fastboot('erase', 'recovery')
     logger.info("Factory reset done!")
 
 @click.command(name="factory_reset")
@@ -293,7 +286,10 @@ def factory_reset():
 def cleanup():
     """Clears builds directory"""
     if os.path.exists("builds"):
+        build_dir = os.path.abspath("builds")
+        logger.info(f"Deleting {build_dir} ...")
         shutil.rmtree("builds")
+        logger.info("Done.")
 
 
 @click.command(name="local")
