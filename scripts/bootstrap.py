@@ -180,18 +180,16 @@ def download_file_system(file_system_name):
             Callback=progress)
     logger.info('Done.')
 
-def push_config_file(file_system_name):
-    file_name = f"{LOCAL_SETUP_DIR}/{file_system_name}.conf"
+def push_config_file(file_name):
     adb_shell(f"mkdir {PATH_TO_CONFIG_FILES}")
     logger.info("Uploading config file ...")
     adb("push", file_name, f"{PATH_TO_CONFIG_FILES}/linux.conf")
     adb_shell(f"chown -R {get_owner_group()} {ANX_APP_ROOT_FOLDER_PATH}")
     logger.info("Done.")
 
-def push_file_system(file_system_name):
-    file_name = f"{LOCAL_SETUP_DIR}/{file_system_name}-rootfs.tar.gz"
+def push_file_system(file_name):
     logger.info("Uploading file system ...")
-    adb("push", file_name, "/sdcard")
+    adb("push", file_name, "/sdcard/flo-linux-rootfs.tar.gz")
     logger.info("Done.")
 
 def setup_chroot_env():
@@ -283,6 +281,34 @@ def exit(return_code):
     s3.close()
     sys.exit(return_code)
 
+@click.group()
+def cli():
+    pass
+
+@click.command()
+@click.argument('filesystem_path')
+@click.argument('filesystem_config_path')
+def local(filesystem_path, filesystem_config_path):
+    """ Use local file system to setup env.
+    
+    Pass 2 arguments:
+
+    1. Path to the file system - a .tar.gz file
+
+    2. Path to file system config - a .conf file
+    """
+    # 1. Push config File
+    push_config_file(filesystem_config_path)
+    adb_shell(f"am start -n {APP_PACKAGE_NAME}/.activity.MainActivity")
+
+    # 2. push file system
+    push_file_system(filesystem_path)
+
+    # 3. Deploy the File system
+    # 3.1 set profile to flo-linux
+    # 3.2 run `$LINUX_DEPLOY deploy`
+    setup_chroot_env()
+
 @click.command()
 @click.option('--network', '-n', default="", help="Use adb over wifi. Format is HOST:[PORT]")
 @click.option('--file-system', '-f', is_flag=True, help='Updates file system to your Flo Edge')
@@ -333,11 +359,13 @@ def main(ctx, network, file_system, ssh_setup, secure_adb, clear_cache):
         # download_file_system(file_system)
 
         # 1. Push config File
-        push_config_file(file_system)
+        config_file = f"{LOCAL_SETUP_DIR}/{file_system}.conf"
+        push_config_file(config_file)
         adb_shell(f"am start -n {APP_PACKAGE_NAME}/.activity.MainActivity")
 
         # 2. push file system
-        push_file_system(file_system)
+        file_system_file = f"{LOCAL_SETUP_DIR}/{file_system}-rootfs.tar.gz"
+        push_file_system(file_system_file)
 
         # 3. Deploy the File system
         # 3.1 set profile to flo-linux
@@ -384,6 +412,8 @@ def main(ctx, network, file_system, ssh_setup, secure_adb, clear_cache):
     time.sleep(5)
     adb("reboot")
 
+cli.add_command(main)
+cli.add_command(local)
 
 if __name__ == "__main__":
-    main()
+    cli()
