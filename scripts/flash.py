@@ -155,20 +155,25 @@ def flash_flo_build(file_name, wipe) -> bool:
     """
     if wipe:
         perform_factory_reset()
+
+    logger.info(f"Unzipping {file_name} ...")
     dir_name = file_name.split(".zip")[0]
     dir_name = os.path.join(os.getcwd(), os.path.abspath(dir_name))
     file_name = os.path.abspath(file_name)
     # unzip file
+    
     if PLATFORM == "windows":
         ret = subprocess.run(['powershell.exe', '-Command',
                               f'Expand-Archive -Path {file_name} -DestinationPath .\\{dir_name}'], capture_output=True)
     else:
         ret = subprocess.run(
-            ['unzip', file_name, f"-d{dir_name}"], capture_output=True)
+            ['unzip', file_name, f"-od{dir_name}"], capture_output=True)
 
     if ret.returncode != 0:
         logger.error(ret.stderr.decode())
         sys.exit(ret.returncode)
+    
+    logger.info("Done")
 
     image_file_pattern = re.compile(r"\w+\.img")
     # flash individual partitions
