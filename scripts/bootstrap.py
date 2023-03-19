@@ -23,10 +23,17 @@ from simple_term_menu import TerminalMenu
 
 import logger
 
-VERSION = "r34.0.0"
+VERSION = "v0.1.0"
+
+PLATFORM_TOOLS_VERSION = "r34.0.0"
 PLATFORM = platform.uname().system.lower()
-PLATFORM_TOOLS_URL = f"https://dl.google.com/android/repository/platform-tools_{VERSION}-{PLATFORM}.zip"
+PLATFORM_TOOLS_URL = f"https://dl.google.com/android/repository/platform-tools_{PLATFORM_TOOLS_VERSION}-{PLATFORM}.zip"
 PLATFORM_TOOLS_PATH=f"{os.getcwd()}/platform-tools"
+
+if PLATFORM == "windows":
+    ADB = f"{PLATFORM_TOOLS_PATH}\\adb.exe"
+else:
+    ADB = f"{PLATFORM_TOOLS_PATH}/adb"
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -48,6 +55,7 @@ s3 = boto3.client(
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
     region_name=AWS_S3_REGION_NAME)
 
+MAGISK = "magisk"
 APP_PACKAGE_NAME="ru.meefik.linuxdeploy"
 ANX_APP_FOLDER_PATH=f"/data/data/{APP_PACKAGE_NAME}"
 ANX_APP_ROOT_FOLDER_PATH=f"{ANX_APP_FOLDER_PATH}/files"
@@ -84,10 +92,7 @@ def check_platform_tools():
 
 def adb_shell(cmd, *args):
     try:
-        if PLATFORM == "windows":
-            ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}\\adb.exe', "shell", cmd] + list(args))
-        else:
-            ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}/adb', "shell", cmd] + list(args))
+        ret = subprocess.run([ADB, "shell", cmd] + list(args), stderr=subprocess.PIPE)
         if ret.returncode == 0:
             return True
         else:
@@ -95,14 +100,11 @@ def adb_shell(cmd, *args):
             exit(ret.returncode)
     except Exception as e:
         logger.error(f"Error in executing adb command : {e}")
-        return False
+        exit(ret.returncode)
 
 def adb(cmd, *args):
     try:
-        if PLATFORM == "windows":
-            ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}\\adb.exe', cmd] + list(args))
-        else:
-            ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}/adb', cmd] + list(args))
+        ret = subprocess.run([ADB, cmd] + list(args), stderr=subprocess.PIPE)
         if ret.returncode == 0:
             return True
         else:
@@ -110,7 +112,26 @@ def adb(cmd, *args):
             exit(ret.returncode)
     except Exception as e:
         logger.error(f"Error in executing adb command : {e}")
-        return False
+        exit(ret.returncode)
+
+def download_magisk_apk():
+    file_name = f"{MAGISK}.apk"
+    logger.info("Downloading Magisk ...")
+    local_magisk = f"{LOCAL_SETUP_DIR}/{file_name}"
+    if os.path.isfile(local_magisk):
+        logger.info("Using cache.")
+        return
+    s3.download_file(
+        Bucket=FLO_OS_SETUP_BUCKET_NAME,
+        Key=file_name,
+        Filename=local_magisk)
+    logger.info("Done.")
+
+def install_magisk():
+    logger.info("Installing Magisk ...")
+    file_name = f"{MAGISK}.apk"
+    adb("install", f"{LOCAL_SETUP_DIR}/{file_name}")
+    logger.info("Done.")
 
 def populate_and_select_file_systems():
     s3.download_file(
@@ -212,10 +233,7 @@ def do_ssh_setup():
     adb_shell("chmod 751 /.ssh/")
 
 def get_owner_group():
-    if PLATFORM == "windows":
-        ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}\\adb.exe', "shell", f"ls -dl {ANX_APP_FOLDER_PATH}"+"| awk '{print $3}'"], capture_output=True)
-    else:
-        ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}/adb', "shell", f"ls -dl {ANX_APP_FOLDER_PATH}"+"| awk '{print $3}'"], capture_output=True)
+    ret = subprocess.run([ADB, "shell", f"ls -dl {ANX_APP_FOLDER_PATH}"+"| awk '{print $3}'"], capture_output=True)
     owner = ret.stdout.decode().rstrip()
     return owner
 
@@ -263,11 +281,8 @@ umount /"""
     adb_shell("chown 0.0 /bin/bootup.sh")
     
 def rm_su_if_present():
-    if PLATFORM == "windows":
-        ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}\\adb.exe', "shell", "test -f /system/xbin/su"], capture_output=True)
-    else:
-        ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}/adb', "shell", "test -f /system/xbin/su"], capture_output=True)
-    
+    ret = subprocess.run([ADB, "shell", "test -f /system/xbin/su"], capture_output=True)
+        
     if ret.returncode !=0:
         logger.info("Found /system/xbin/su. Proceeding to delete...")
         adb_shell("rm /system/xbin/su")
@@ -281,22 +296,42 @@ def exit(return_code):
     s3.close()
     sys.exit(return_code)
 
-@click.group()
-def cli():
-    pass
+def pre_setup():
+    # Download platform tools
+    check_platform_tools()
 
-@click.command()
+    if not os.path.exists(LOCAL_SETUP_DIR):
+        os.mkdir(LOCAL_SETUP_DIR)
+
+    # os.chdir(LOCAL_SETUP_DIR)
+    # set adb to root
+    adb("root")
+
+    # remount : equivalent to mount -o rw,remount /
+    adb("remount")
+
+    # ensure app has storage permission granted
+    adb_shell(f"pm grant {APP_PACKAGE_NAME} android.permission.WRITE_EXTERNAL_STORAGE")
+
+    # 0. Download and install magisk
+    download_magisk_apk()
+    install_magisk()
+
+@click.command(name="local_setup")
 @click.argument('filesystem_path')
 @click.argument('filesystem_config_path')
-def local(filesystem_path, filesystem_config_path):
-    """ Use local file system to setup env.
-    
+def local_setup(filesystem_path, filesystem_config_path):
+    """
+    Local boostrap setup of file system
+
     Pass 2 arguments:
 
     1. Path to the file system - a .tar.gz file
 
     2. Path to file system config - a .conf file
     """
+    pre_setup()
+
     # 1. Push config File
     push_config_file(filesystem_config_path)
     adb_shell(f"am start -n {APP_PACKAGE_NAME}/.activity.MainActivity")
@@ -309,62 +344,44 @@ def local(filesystem_path, filesystem_config_path):
     # 3.2 run `$LINUX_DEPLOY deploy`
     setup_chroot_env()
 
-@click.command()
-@click.option('--network', '-n', default="", help="Use adb over wifi. Format is HOST:[PORT]")
-@click.option('--file-system', '-f', is_flag=True, help='Updates file system to your Flo Edge')
-@click.option('--ssh-setup', '-s', is_flag=True, help='sets up openssh-server on your Flo Edge ')
-@click.option('--secure-adb', '-a', is_flag=True, help='sets up adb keys on your Flo Edge and secures it.')
-@click.option('--clear-cache', '-c', is_flag=True, help='Clears setup directory')
-@click.pass_context
-def main(ctx, network, file_system, ssh_setup, secure_adb, clear_cache):
+@click.command(name="clean")
+def clean():
+    """Clears setup directory"""
+    logger.info("Clearing setup folder ...")
+    cleanup()
+    logger.info("Done.")
+    return
+
+@click.command(name="remote_setup")
+@click.option('--setup-fs', '-f', is_flag=True, help='Download a file system upload it to your Flo Edge')
+@click.option('--setup-ssh', '-s', is_flag=True, help='Sets up openssh-server on your Flo Edge ')
+@click.option('--secure-adb', '-a', is_flag=True, help='Sets up adb keys on your Flo Edge and secures it.')
+def remote_setup(setup_fs, ssh_setup, secure_adb):
     """
-    Prerequisities are :
+    Download and setup a file system.
 
-    1. AWS User credentials.
+    To download and setup file systems, make sure you have :
 
-    2. Access to flo os setup bundle
+    - AWS bucket access
 
-    3. Make sure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME env variables are added before running this script
+    - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME env variables sourced
     """
-    if (not secure_adb and not ssh_setup and not file_system and not clear_cache):
-        print(ctx.get_help())
-        return
-
-    if(clear_cache):
-        logger.info("Clearing setup folder ...")
-        cleanup()
-        logger.info("Done.")
-        return
     
-    # Download platform tools
-    check_platform_tools()
-
-    if not os.path.exists(LOCAL_SETUP_DIR):
-        os.mkdir(LOCAL_SETUP_DIR)
+    pre_setup()
     
-    # os.chdir(LOCAL_SETUP_DIR)
-    # set adb to root
-    adb("root")
+    if setup_fs:
+        file_system_name = populate_and_select_file_systems()
 
-    # remount : equivalent to mount -o rw,remount /
-    adb("remount")
-
-    # ensure app has storage permission granted
-    adb_shell(f"pm grant {APP_PACKAGE_NAME} android.permission.WRITE_EXTERNAL_STORAGE")
-    
-    if(file_system):
-        file_system = populate_and_select_file_systems()
-
-        download_fs_config(file_system)
+        download_fs_config(file_system_name)
         # download_file_system(file_system)
 
         # 1. Push config File
-        config_file = f"{LOCAL_SETUP_DIR}/{file_system}.conf"
+        config_file = f"{LOCAL_SETUP_DIR}/{file_system_name}.conf"
         push_config_file(config_file)
         adb_shell(f"am start -n {APP_PACKAGE_NAME}/.activity.MainActivity")
 
         # 2. push file system
-        file_system_file = f"{LOCAL_SETUP_DIR}/{file_system}-rootfs.tar.gz"
+        file_system_file = f"{LOCAL_SETUP_DIR}/{file_system_name}-rootfs.tar.gz"
         push_file_system(file_system_file)
 
         # 3. Deploy the File system
@@ -380,14 +397,12 @@ def main(ctx, network, file_system, ssh_setup, secure_adb, clear_cache):
 
     # 6. Copy adb keys
     if(secure_adb):
+        download_adb_setup()
         logger.info("Uploading adb keys to device ...")
         adb_shell("cp adb_keys /data/misc/adb")
         logger.info("Done.")
 
     create_boot_up_script(ssh_setup, secure_adb)
-    
-    # Done with setup
-    adb_shell("cd ..")
     
     # cleanup
     # ssh setup
@@ -399,7 +414,7 @@ def main(ctx, network, file_system, ssh_setup, secure_adb, clear_cache):
         adb_shell(f"rm -r {ADB_SETUP}")
 
     # set it back to read-only fs
-    adb_shell("mount -o ro,remount /")
+    adb_shell("umount /")
 
     # locks the system
     if(secure_adb):
@@ -412,8 +427,29 @@ def main(ctx, network, file_system, ssh_setup, secure_adb, clear_cache):
     time.sleep(5)
     adb("reboot")
 
-cli.add_command(main)
-cli.add_command(local)
+@click.group()
+@click.version_option(version="", message=f"Flo OS bootstrap utility : {VERSION}")
+def cli():
+    """
+    Flo OS bootstrap utility
+
+    Important points:
+
+    1. To download and setup file systems, make sure you have :
+
+    - AWS bucket access
+
+    - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME env variables sourced
+
+    2. For local based file system setup, the file system must be a .tar.gz file.
+
+    3. To setup ssh and secure_adb, as of now it's only possible with remote_setup
+    """
+    pass
+
+cli.add_command(remote_setup)
+cli.add_command(local_setup)
+cli.add_command(clean)
 
 if __name__ == "__main__":
     cli()
