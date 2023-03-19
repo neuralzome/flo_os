@@ -145,10 +145,17 @@ def adb_reboot_bootloader():
 def factory_reset():
     logger.info("Proceeding to perform a factory reset.")
     if PLATFORM == "windows":
-            subprocess.run(['platform-tools\\fastboot.exe',
-                            '-w'])
+        subprocess.run(['platform-tools\\fastboot.exe','-w'])
+        subprocess.run(['platform-tools\\fastboot.exe','erase','system'])
+        subprocess.run(['platform-tools\\fastboot.exe','erase','vendor'])
+        subprocess.run(['platform-tools\\fastboot.exe','erase','boot'])
+        subprocess.run(['platform-tools\\fastboot.exe','erase','recovery'])
     else:
         subprocess.run(['./platform-tools/fastboot', '-w'])
+        subprocess.run(['./platform-tools/fastboot','erase', 'system'])
+        subprocess.run(['./platform-tools/fastboot','erase', 'vendor'])
+        subprocess.run(['./platform-tools/fastboot','erase', 'boot'])
+        subprocess.run(['./platform-tools/fastboot','erase', 'recovery'])
     logger.info("Factory reset done!")
 
 def cleanup():
@@ -172,6 +179,10 @@ def main(wipe, flash, clear_cache):
 
     if(clear_cache):
         cleanup()
+        return
+    
+    if(wipe):
+        factory_reset()
         return
 
     # Download platform tools

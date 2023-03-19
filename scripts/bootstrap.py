@@ -85,10 +85,14 @@ def check_platform_tools():
 def adb_shell(cmd, *args):
     try:
         if PLATFORM == "windows":
-            subprocess.run([f'{PLATFORM_TOOLS_PATH}\\adb.exe', "shell", cmd] + list(args))
+            ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}\\adb.exe', "shell", cmd] + list(args))
         else:
-            subprocess.run([f'{PLATFORM_TOOLS_PATH}/adb', "shell", cmd] + list(args))
-        return True
+            ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}/adb', "shell", cmd] + list(args))
+        if ret.returncode == 0:
+            return True
+        else:
+            logger.error(ret.stderr.decode())
+            exit(ret.returncode)
     except Exception as e:
         logger.error(f"Error in executing adb command : {e}")
         return False
@@ -96,10 +100,14 @@ def adb_shell(cmd, *args):
 def adb(cmd, *args):
     try:
         if PLATFORM == "windows":
-            subprocess.run([f'{PLATFORM_TOOLS_PATH}\\adb.exe', cmd] + list(args))
+            ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}\\adb.exe', cmd] + list(args))
         else:
-            subprocess.run([f'{PLATFORM_TOOLS_PATH}/adb', cmd] + list(args))
-        return True
+            ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}/adb', cmd] + list(args))
+        if ret.returncode == 0:
+            return True
+        else:
+            logger.error(ret.stderr.decode())
+            exit(ret.returncode)
     except Exception as e:
         logger.error(f"Error in executing adb command : {e}")
         return False
@@ -121,7 +129,13 @@ def populate_and_select_file_systems():
     return versions[selected_version_index]
 
 def download_ssh_setup():
-    pass
+    logger.info(f"Downloading ssh setup files ...")
+    file_name = f"{SSH_SETUP}.zip"
+    s3.download_file(
+        Bucket=FLO_OS_SETUP_BUCKET_NAME,
+        Key=file_name,
+        Filename=f"{LOCAL_SETUP_DIR}/{file_name}")
+    logger.info("Done.")
 
 def download_adb_setup():
     pass
@@ -187,21 +201,17 @@ def setup_chroot_env():
 
 def do_ssh_setup():
     adb("push", f"{LOCAL_SETUP_DIR}/{SSH_SETUP}.zip", "/")
-    adb_shell("cd", "/")
     adb_shell("unzip", f"{SSH_SETUP}.zip")
     adb_shell("rm", f"{SSH_SETUP}.zip")
-    adb_shell("cd", f"{SSH_SETUP}")
 
-    adb_shell("mkdir /.ssh")
-    adb_shell("mkdir -p /data/adb/service.d/")
-    adb_shell("mv sshd_config /data/ssh/")
-    adb_shell("mv ssh_host_rsa_key /data/ssh/")
-    adb_shell("mv authorized_keys /.ssh/")
+    adb_shell("mkdir -p /.ssh")
+    adb_shell(f"mv {SSH_SETUP}/sshd_config /data/ssh/")
+    adb_shell(f"mv {SSH_SETUP}/ssh_host_rsa_key /data/ssh/")
+    adb_shell(f"mv {SSH_SETUP}/authorized_keys /.ssh/")
     adb_shell("chmod 600 /data/ssh/ssh_host_rsa_key")
     adb_shell("chmod 644 /.ssh/authorized_keys")
     adb_shell("chmod 660 /data/ssh/sshd_config")
     adb_shell("chmod 751 /.ssh/")
-    adb_shell("chmod 755 /data/adb/service.d/")
 
 def get_owner_group():
     if PLATFORM == "windows":
@@ -213,13 +223,65 @@ def get_owner_group():
 
 def create_boot_up_script(ssh_setup, secure_adb):
     # create bootup.sh
-    # push to /data/adb/service.d/
-    # chmod 771 /data/adb/service.d/bootup.sh
-    pass
+    with open(f"{LOCAL_SETUP_DIR}/flo_edge_bootup.rc", "w") as script:
+        script.write('service flo_edge_bootup /system/bin/bootup.sh\n')
+        script.write('\tdisabled\n')
+        script.write('\toneshot\n')
+        script.write('\tseclabel u:r:magisk:s0\n')
+        script.write("on property:sys.boot_completed=1\n")
+        script.write("\tstart flo_edge_bootup")
+
+    with open(f"{LOCAL_SETUP_DIR}/bootup.sh", "w") as script:
+        script_text = """#!/bin/sh
+function bootup {
+    echo "-------------- $(date) ----------"
+    /system/bin/sshd
+
+    # Loop until the directory exists
+    COUNTER=0
+    while [ ! -f "/sdcard/linux.img" ]
+    do
+        sleep 1   # Wait for 1 second before checking again
+        ((COUNTER++))
+    done
+
+    echo "Found /sdcard/linux.img after $COUNTER secs" 
+    /data/data/ru.meefik.linuxdeploy/files/bin/linuxdeploy -d start -m
+    
+    ps -A | grep ssh
+}
+
+mount -o rw,remount /
+mkdir -p /logs
+bootup >> /logs/bootup.log 2>&1
+umount /"""
+        script.write(script_text)
+    
+    adb("push", f"{LOCAL_SETUP_DIR}/flo_edge_bootup.rc", "/etc/init")
+    adb("push", f"{LOCAL_SETUP_DIR}/bootup.sh", "/bin/")
+    adb_shell("chmod 644 /etc/init/flo_edge_bootup.rc")
+    adb_shell("chown 0.0 /etc/init/flo_edge_bootup.rc")
+    adb_shell("chmod 755 /bin/bootup.sh")
+    adb_shell("chown 0.0 /bin/bootup.sh")
+    
+def rm_su_if_present():
+    if PLATFORM == "windows":
+        ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}\\adb.exe', "shell", "test -f /system/xbin/su"], capture_output=True)
+    else:
+        ret = subprocess.run([f'{PLATFORM_TOOLS_PATH}/adb', "shell", "test -f /system/xbin/su"], capture_output=True)
+    
+    if ret.returncode !=0:
+        logger.info("Found /system/xbin/su. Proceeding to delete...")
+        adb_shell("rm /system/xbin/su")
+        logger.info("Done.")
 
 def cleanup():
     if os.path.exists(LOCAL_SETUP_DIR):
         shutil.rmtree(LOCAL_SETUP_DIR)
+
+def exit(return_code):
+    s3.close()
+    sys.exit(return_code)
 
 @click.command()
 @click.option('--network', '-n', default="", help="Use adb over wifi. Format is HOST:[PORT]")
@@ -285,6 +347,7 @@ def main(ctx, network, file_system, ssh_setup, secure_adb, clear_cache):
 
     # 5. run adb ssh setup
     if(ssh_setup):
+        download_ssh_setup()
         do_ssh_setup()
 
     # 6. Copy adb keys
