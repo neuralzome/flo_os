@@ -154,7 +154,7 @@ def flash_flo_build(file_name, wipe) -> bool:
         True if successful
     """
     if wipe:
-        factory_reset()
+        perform_factory_reset()
     dir_name = file_name.split(".zip")[0]
     dir_name = os.path.join(os.getcwd(), os.path.abspath(dir_name))
     file_name = os.path.abspath(file_name)
@@ -241,6 +241,27 @@ def wait_for_fastboot_device():
     logger.warn("3. Device could be faulty. <|-_-|>. Don't blame the software!!")
     return False
 
+def perform_factory_reset():
+    # Download platform tools
+    check_platform_tools()
+
+    fastboot_ok = wait_for_fastboot_device()
+    if not fastboot_ok:
+        sys.exit(1)
+    logger.info("Proceeding to perform a factory reset.")
+    if PLATFORM == "windows":
+        subprocess.run(['platform-tools\\fastboot.exe', '-w'])
+        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'system'])
+        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'vendor'])
+        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'boot'])
+        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'recovery'])
+    else:
+        subprocess.run(['./platform-tools/fastboot', '-w'])
+        subprocess.run(['./platform-tools/fastboot', 'erase', 'system'])
+        subprocess.run(['./platform-tools/fastboot', 'erase', 'vendor'])
+        subprocess.run(['./platform-tools/fastboot', 'erase', 'boot'])
+        subprocess.run(['./platform-tools/fastboot', 'erase', 'recovery'])
+    logger.info("Factory reset done!")
 
 @click.command(name="factory_reset")
 def factory_reset():
@@ -260,26 +281,7 @@ def factory_reset():
 
     6. recovery
     """
-    # Download platform tools
-    check_platform_tools()
-    
-    fastboot_ok = wait_for_fastboot_device()
-    if not fastboot_ok:
-        sys.exit(1)
-    logger.info("Proceeding to perform a factory reset.")
-    if PLATFORM == "windows":
-        subprocess.run(['platform-tools\\fastboot.exe', '-w'])
-        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'system'])
-        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'vendor'])
-        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'boot'])
-        subprocess.run(['platform-tools\\fastboot.exe', 'erase', 'recovery'])
-    else:
-        subprocess.run(['./platform-tools/fastboot', '-w'])
-        subprocess.run(['./platform-tools/fastboot', 'erase', 'system'])
-        subprocess.run(['./platform-tools/fastboot', 'erase', 'vendor'])
-        subprocess.run(['./platform-tools/fastboot', 'erase', 'boot'])
-        subprocess.run(['./platform-tools/fastboot', 'erase', 'recovery'])
-    logger.info("Factory reset done!")
+    perform_factory_reset()
 
 
 @click.command(name="clean")
