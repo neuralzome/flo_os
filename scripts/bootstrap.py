@@ -282,6 +282,8 @@ function bootup {
     /data/data/ru.meefik.linuxdeploy/files/bin/linuxdeploy -d start -m
     
     ps -A | grep ssh
+
+    setprop service.adb.tcp.port 5555
 }
 
 mount -o rw,remount /
