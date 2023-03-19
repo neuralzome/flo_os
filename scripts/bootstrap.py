@@ -336,7 +336,7 @@ def pre_setup():
     download_magisk_apk()
     install_magisk()
 
-@click.command(name="local_setup")
+@click.command(name="local")
 @click.argument('filesystem_path')
 @click.argument('filesystem_config_path')
 def local_setup(filesystem_path, filesystem_config_path):
@@ -376,7 +376,7 @@ def clean():
     logger.info("Done.")
     return
 
-@click.command(name="remote_setup")
+@click.command(name="remote")
 @click.option('--setup-fs', '-f', is_flag=True, help='Download a file system upload it to your Flo Edge')
 @click.option('--setup-ssh', '-s', is_flag=True, help='Sets up openssh-server on your Flo Edge ')
 @click.option('--secure-adb', '-a', is_flag=True, help='Sets up adb keys on your Flo Edge and secures it.')
