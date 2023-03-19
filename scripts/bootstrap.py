@@ -448,6 +448,8 @@ def cli():
 
     Important points:
 
+    This script assumes only a single device is connected to the host PC.
+
     1. To download and setup file systems, make sure you have :
 
     - AWS bucket access

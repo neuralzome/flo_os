@@ -223,6 +223,7 @@ def wait_for_fastboot_device():
         logger.error(
             'Device not found in ADB mode.')
         logger.warn("Check if device is switched on.")
+        logger.warn("Ensure only a single device is connected to the host PC.")
         return False
 
     # Reboot into bootloader
@@ -350,6 +351,8 @@ def cli():
     """Flo OS flash utility
 
     Important points:
+
+    This script assumes only a single device is connected to the host PC.
 
     1. To download and flash flo OS builds, make sure you have :
 
