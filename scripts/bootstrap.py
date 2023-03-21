@@ -242,6 +242,7 @@ def push_file_system(file_name):
 
 def setup_chroot_env():
     logger.info("Setting up chroot env ...")
+    adb_shell(LINUX_DEPLOY, "stop -u")
     adb_shell(LINUX_DEPLOY, "deploy")
     logger.info("Done.")
 
@@ -286,8 +287,8 @@ def create_boot_up_script(ssh_setup):
         script.write("\tstart flo_edge_bootup")
 
     with open(f"{LOCAL_SETUP_DIR}/bootup.sh", "w") as script:
-        script_text = """#!/bin/sh
-function bootup {
+        script_text = f"""#!/bin/sh
+function bootup {{
     echo "-------------- $(date) ----------"
     /system/bin/sshd
 
@@ -300,14 +301,14 @@ function bootup {
     done
 
     echo "Found /sdcard/linux.img after $COUNTER secs" 
-    {} -dt start -m
+    {LINUX_DEPLOY} -dt start -m
     
     ps -A | grep ssh
 
     setprop service.adb.tcp.port 5555
     
     am start -n com.flomobility.anx.headless/com.flomobility.anx.activity.MainActivity
-}
+}}
 
 mount -o rw,remount /
 mkdir -p /logs
