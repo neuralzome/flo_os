@@ -56,7 +56,8 @@ s3 = boto3.client(
     region_name=AWS_S3_REGION_NAME)
 
 MAGISK = "magisk"
-APP_PACKAGE_NAME="ru.meefik.linuxdeploy"
+ANX = "anx"
+APP_PACKAGE_NAME="com.flomobility.anx.headless"
 ANX_APP_FOLDER_PATH=f"/data/data/{APP_PACKAGE_NAME}"
 ANX_APP_ROOT_FOLDER_PATH=f"{ANX_APP_FOLDER_PATH}/files"
 # variables for cli
@@ -130,6 +131,25 @@ def download_magisk_apk():
 def install_magisk():
     logger.info("Installing Magisk ...")
     file_name = f"{MAGISK}.apk"
+    adb("install", f"{LOCAL_SETUP_DIR}/{file_name}")
+    logger.info("Done.")
+
+def download_anx_apk():
+    file_name = f"{ANX}.apk"
+    logger.info("Downloading anx ...")
+    local_magisk = f"{LOCAL_SETUP_DIR}/{file_name}"
+    if os.path.isfile(local_magisk):
+        logger.info("Using cache.")
+        return
+    s3.download_file(
+        Bucket=FLO_OS_SETUP_BUCKET_NAME,
+        Key=file_name,
+        Filename=local_magisk)
+    logger.info("Done.")
+
+def install_anx():
+    logger.info("Installing anx app  ...")
+    file_name = f"{ANX}.apk"
     adb("install", f"{LOCAL_SETUP_DIR}/{file_name}")
     logger.info("Done.")
 
@@ -279,17 +299,19 @@ function bootup {
     done
 
     echo "Found /sdcard/linux.img after $COUNTER secs" 
-    /data/data/ru.meefik.linuxdeploy/files/bin/linuxdeploy -dt start -m
+    {} -dt start -m
     
     ps -A | grep ssh
 
     setprop service.adb.tcp.port 5555
+    
+    am start -n com.flomobility.anx.headless/com.flomobility.anx.activity.MainActivity
 }
 
 mount -o rw,remount /
 mkdir -p /logs
 bootup >> /logs/bootup.log 2>&1
-umount /"""
+umount /""".format(LINUX_DEPLOY)
         script.write(script_text)
     
     adb("push", f"{LOCAL_SETUP_DIR}/flo_edge_bootup.rc", "/etc/init")
@@ -329,12 +351,17 @@ def pre_setup():
     # remount : equivalent to mount -o rw,remount /
     adb("remount")
 
+    # Download and install magisk
+    download_magisk_apk()
+    install_magisk()
+
+    # Download and install anx app
+    download_anx_apk()
+    install_anx()
+
     # ensure app has storage permission granted
     adb_shell(f"pm grant {APP_PACKAGE_NAME} android.permission.WRITE_EXTERNAL_STORAGE")
 
-    # 0. Download and install magisk
-    download_magisk_apk()
-    install_magisk()
 
 @click.command(name="local")
 @click.argument('filesystem_path')
