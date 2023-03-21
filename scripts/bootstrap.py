@@ -430,7 +430,7 @@ def remote_setup(setup_fs, setup_ssh, secure_adb):
         # 1. Push config File
         config_file = f"{LOCAL_SETUP_DIR}/{file_system_name}.conf"
         push_config_file(config_file)
-        adb_shell(f"am start -n {APP_PACKAGE_NAME}/.activity.MainActivity")
+        adb_shell(f"am start -n {APP_PACKAGE_NAME}/{APP_NAME}.activity.MainActivity")
 
         # 2. push file system
         file_system_file = f"{LOCAL_SETUP_DIR}/{file_system_name}-rootfs.tar.gz"
