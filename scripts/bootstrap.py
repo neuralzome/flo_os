@@ -57,7 +57,8 @@ s3 = boto3.client(
 
 MAGISK = "magisk"
 ANX = "anx"
-APP_PACKAGE_NAME="com.flomobility.anx.headless"
+APP_NAME = "com.flomobility.anx"
+APP_PACKAGE_NAME=f"{APP_NAME}.headless"
 ANX_APP_FOLDER_PATH=f"/data/data/{APP_PACKAGE_NAME}"
 ANX_APP_ROOT_FOLDER_PATH=f"{ANX_APP_FOLDER_PATH}/files"
 # variables for cli
@@ -380,7 +381,7 @@ def local_setup(filesystem_path, filesystem_config_path):
 
     # 1. Push config File
     push_config_file(filesystem_config_path)
-    adb_shell(f"am start -n {APP_PACKAGE_NAME}/.activity.MainActivity")
+    adb_shell(f"am start -n {APP_PACKAGE_NAME}/{APP_NAME}.activity.MainActivity")
 
     # 2. push file system
     push_file_system(filesystem_path)
