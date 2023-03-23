@@ -313,7 +313,7 @@ function bootup {{
 mount -o rw,remount /
 mkdir -p /logs
 bootup >> /logs/bootup.log 2>&1
-umount /""".format(LINUX_DEPLOY)
+umount /"""
         script.write(script_text)
     
     adb("push", f"{LOCAL_SETUP_DIR}/flo_edge_bootup.rc", "/etc/init")
