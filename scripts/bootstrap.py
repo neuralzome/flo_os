@@ -243,6 +243,7 @@ def push_file_system(file_name):
 def setup_chroot_env():
     logger.info("Setting up chroot env ...")
     adb_shell(LINUX_DEPLOY, "stop -u")
+    time.sleep(2)
     adb_shell(LINUX_DEPLOY, "deploy")
     logger.info("Done.")
 
