@@ -295,7 +295,7 @@ function vibrate {{
    do
       echo -n 10000 >/sys/class/leds/vibrator/duration
       echo -n 1 >/sys/class/leds/vibrator/activate
-      sleep 5
+      sleep 0.1
    done
    echo -n 0 >/sys/class/leds/vibrator/duration
    echo -n 0 >/sys/class/leds/vibrator/activate
