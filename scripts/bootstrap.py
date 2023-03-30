@@ -289,6 +289,18 @@ def create_boot_up_script(ssh_setup):
 
     with open(f"{LOCAL_SETUP_DIR}/bootup.sh", "w") as script:
         script_text = f"""#!/bin/sh
+ENABLE_VIBRATION="/enable_vibration"
+function vibrate {{
+   while [ ! -e "$ENABLE_VIBRATION" ] || [ "$(cat $ENABLE_VIBRATION)" != 0 ];
+   do
+      echo -n 10000 >/sys/class/leds/vibrator/duration
+      echo -n 1 >/sys/class/leds/vibrator/activate
+      sleep 5
+   done
+   echo -n 0 >/sys/class/leds/vibrator/duration
+   echo -n 0 >/sys/class/leds/vibrator/activate
+}}
+
 function bootup {{
     echo "-------------- $(date) ----------"
     /system/bin/sshd
@@ -314,6 +326,7 @@ function bootup {{
 mount -o rw,remount /
 mkdir -p /logs
 bootup >> /logs/bootup.log 2>&1
+vibrate &
 umount /"""
         script.write(script_text)
     
