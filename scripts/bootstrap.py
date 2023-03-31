@@ -325,8 +325,8 @@ function bootup {{
 
 mount -o rw,remount /
 mkdir -p /logs
-bootup >> /logs/bootup.log 2>&1
 vibrate &
+bootup >> /logs/bootup.log 2>&1
 umount /"""
         script.write(script_text)
     
