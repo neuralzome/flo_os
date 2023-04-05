@@ -314,10 +314,19 @@ function bootup {{
     done
 
     echo "Found /sdcard/linux.img after $COUNTER secs" 
-    {LINUX_DEPLOY} -dt start -m
+    {LINUX_DEPLOY} mount
+
+    # remove old ssh pid files if any
+    if [[ -f /data/local/mnt/run/sshd.pid ]]; then
+        echo "Found old ssh pid file, removing"
+        rm /data/local/mnt/run/sshd.pid
+    fi
+
+    {LINUX_DEPLOY} -d start
     
     ps -A | grep ssh
 
+    # start adb over wifi
     setprop service.adb.tcp.port 5555
     
     am start -n com.flomobility.anx.headless/com.flomobility.anx.activity.MainActivity
