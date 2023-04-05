@@ -378,6 +378,9 @@ def pre_setup():
     # ensure app has storage permission granted
     adb_shell(f"pm grant {APP_PACKAGE_NAME} android.permission.WRITE_EXTERNAL_STORAGE")
 
+    # disable lock screen
+    adb_shell("locksettings set-disabled true")
+
 
 @click.command(name="local")
 @click.argument('filesystem_path')
