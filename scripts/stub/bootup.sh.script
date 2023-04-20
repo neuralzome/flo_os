@@ -1,0 +1,121 @@
+#!/bin/sh
+ENABLE_VIBRATION="/enable_vibration"
+DO_RECOVERY="/system/do_recovery"
+pulse_vibrate_is_running=0
+function vibrate {
+   while [ ! -e "$ENABLE_VIBRATION" ] || [ "$(cat $ENABLE_VIBRATION)" != 0 ];
+   do
+      echo -n 10000 >/sys/class/leds/vibrator/duration
+      echo -n 1 >/sys/class/leds/vibrator/activate
+      sleep 0.1
+   done
+   echo -n 0 >/sys/class/leds/vibrator/duration
+   echo -n 0 >/sys/class/leds/vibrator/activate
+}
+
+pulse_vibrate_is_running="/system/tmp/pulse_vibrate_is_running"
+pulse_vibrate_pid=-1
+function pulse_vibrate {
+    # default duty cycle is 50%
+    # time period is 1s
+    while [ ! -e "$pulse_vibrate_is_running" ] || [ ! "$(cat $pulse_vibrate_is_running)" -eq 0 ];
+    do
+        echo -n 1000 >/sys/class/leds/vibrator/duration
+        echo -n 1 >/sys/class/leds/vibrator/activate
+        sleep 1
+        echo -n 0 >/sys/class/leds/vibrator/duration
+        echo -n 0 >/sys/class/leds/vibrator/activate
+        sleep 1
+    done
+}
+
+function check_recovery {
+    # Loop until the directory exists
+    while [ ! -f "/sdcard/linux.img" ]
+    do
+        sleep 1   # Wait for 1 second before checking again
+    done
+
+    # checking if recovery is needed
+    if [[ -e $DO_RECOVERY && "$(cat $DO_RECOVERY)" != 0 ]];then
+        echo "Performing file system recovery"
+        echo 1 > $pulse_vibrate_is_running
+        pulse_vibrate &
+        pulse_vibrate_pid=$!
+
+        {LINUX_DEPLOY} deploy
+
+        if [[ $? -eq 0 ]]; then
+            # success
+            echo "Recovery successful"
+            echo 0 > $DO_RECOVERY
+        else
+            echo "Error in recovery : $?"
+        fi
+        echo 0 > $pulse_vibrate_is_running
+        wait
+        rm $pulse_vibrate_is_running
+        pulse_vibrate_pid=-1
+    else
+        echo "Recovery not needed, skipping"
+    fi
+}
+
+SERVER="/system/bin/server.sh"
+server_pid=-1
+function start_rpc_server {
+    $SERVER &
+    server_pid=$!
+    if [[ $? -eq 0 ]]; then
+        echo "RPC server running. PID : $server_pid"
+    else
+        echo "Error in starting RPC server : $?"
+    fi
+}
+
+function bootup {
+    /system/bin/sshd
+
+    # Loop until the directory exists
+    COUNTER=0
+    while [ ! -f "/sdcard/linux.img" ]
+    do
+        sleep 1   # Wait for 1 second before checking again
+        ((COUNTER++))
+    done
+
+    echo "Found /sdcard/linux.img after $COUNTER secs"
+    start_rpc_server
+    {LINUX_DEPLOY} mount
+
+    # remove old ssh pid files if any
+    if [[ -f /data/local/mnt/run/sshd.pid ]]; then
+        echo "Found old ssh pid file, removing"
+        rm /data/local/mnt/run/sshd.pid
+    fi
+
+    {LINUX_DEPLOY} -d start
+    
+    ps -A | grep ssh
+
+    # start adb over wifi
+    setprop service.adb.tcp.port 5555
+    
+    am start -n com.flomobility.anx.headless/com.flomobility.anx.activity.MainActivity
+}
+
+function cleanup {
+   echo "Caught SIGINT"
+   kill $pulse_vibrate_pid
+   exit 0
+}
+
+trap cleanup SIGINT
+
+mount -o rw,remount /
+mkdir -p /logs
+echo "-------------- $(date) --------------" >> /logs/bootup.log
+check_recovery >> /logs/bootup.log 2>&1
+vibrate &
+bootup >> /logs/bootup.log 2>&1
+umount /

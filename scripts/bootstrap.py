@@ -25,6 +25,13 @@ import logger
 
 VERSION = "v0.1.0"
 
+SCRIPT_DIR=os.path.abspath(os.path.dirname(__file__))
+STUB_SCRIPTS_DIR=""
+if os.path.islink(__file__):
+    STUB_SCRIPTS_DIR=f"{SCRIPT_DIR}/scripts/stub"
+else:
+    STUB_SCRIPTS_DIR=f"{SCRIPT_DIR}/stub"
+
 PLATFORM_TOOLS_VERSION = "r34.0.0"
 PLATFORM = platform.uname().system.lower()
 PLATFORM_TOOLS_URL = f"https://dl.google.com/android/repository/platform-tools_{PLATFORM_TOOLS_VERSION}-{PLATFORM}.zip"
@@ -41,7 +48,7 @@ AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME")
 
 FLO_OS_SETUP_BUCKET_NAME = "flo-os-setup"
 
-LOCAL_SETUP_DIR = "setup"
+LOCAL_SETUP_DIR = f"{SCRIPT_DIR}/setup"
 SSH_SETUP = "ssh_setup"
 ADB_SETUP = "adb_keys"
 
@@ -288,63 +295,27 @@ def create_boot_up_script(ssh_setup):
         script.write("\tstart flo_edge_bootup")
 
     with open(f"{LOCAL_SETUP_DIR}/bootup.sh", "w") as script:
-        script_text = f"""#!/bin/sh
-ENABLE_VIBRATION="/enable_vibration"
-function vibrate {{
-   while [ ! -e "$ENABLE_VIBRATION" ] || [ "$(cat $ENABLE_VIBRATION)" != 0 ];
-   do
-      echo -n 10000 >/sys/class/leds/vibrator/duration
-      echo -n 1 >/sys/class/leds/vibrator/activate
-      sleep 0.1
-   done
-   echo -n 0 >/sys/class/leds/vibrator/duration
-   echo -n 0 >/sys/class/leds/vibrator/activate
-}}
-
-function bootup {{
-    echo "-------------- $(date) ----------"
-    /system/bin/sshd
-
-    # Loop until the directory exists
-    COUNTER=0
-    while [ ! -f "/sdcard/linux.img" ]
-    do
-        sleep 1   # Wait for 1 second before checking again
-        ((COUNTER++))
-    done
-
-    echo "Found /sdcard/linux.img after $COUNTER secs" 
-    {LINUX_DEPLOY} mount
-
-    # remove old ssh pid files if any
-    if [[ -f /data/local/mnt/run/sshd.pid ]]; then
-        echo "Found old ssh pid file, removing"
-        rm /data/local/mnt/run/sshd.pid
-    fi
-
-    {LINUX_DEPLOY} -d start
+        # open .script file and copy the text
+        with open(f"{STUB_SCRIPTS_DIR}/bootup.sh.script", "r") as script_stub:
+            script_text = script_stub.read()
+            script_text = script_text.replace("{LINUX_DEPLOY}", LINUX_DEPLOY)
+            script.write(script_text)
     
-    ps -A | grep ssh
+    with open(f"{LOCAL_SETUP_DIR}/server.sh", "w") as script:
+        # open .script file and copy the text
+        with open(f"{STUB_SCRIPTS_DIR}/server.sh.script", "r") as script_stub:
+            script_text = script_stub.read()
+            script.write(script_text)
 
-    # start adb over wifi
-    setprop service.adb.tcp.port 5555
-    
-    am start -n com.flomobility.anx.headless/com.flomobility.anx.activity.MainActivity
-}}
-
-mount -o rw,remount /
-mkdir -p /logs
-vibrate &
-bootup >> /logs/bootup.log 2>&1
-umount /"""
-        script.write(script_text)
-    
     adb("push", f"{LOCAL_SETUP_DIR}/flo_edge_bootup.rc", "/etc/init")
     adb("push", f"{LOCAL_SETUP_DIR}/bootup.sh", "/bin/")
+    adb("push", f"{LOCAL_SETUP_DIR}/server.sh", "/bin/")
     adb_shell("chmod 644 /etc/init/flo_edge_bootup.rc")
     adb_shell("chown 0.0 /etc/init/flo_edge_bootup.rc")
     adb_shell("chmod 755 /bin/bootup.sh")
     adb_shell("chown 0.0 /bin/bootup.sh")
+    adb_shell("chmod 755 /bin/server.sh")
+    adb_shell("chown 0.0 /bin/server.sh")
     
 def rm_su_if_present():
     ret = subprocess.run([ADB, "shell", "test -f /system/xbin/su"], capture_output=True)

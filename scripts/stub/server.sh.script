@@ -1,0 +1,212 @@
+#!/bin/sh
+
+# Reset
+Color_Off='\033[0m'       # Text Reset
+
+# Regular Colors
+Red='\033[0;31m'          # Red
+Green='\033[0;32m'        # Green
+White='\033[0;37m'        # White
+
+my_pid=$$
+logging_pid=-1
+
+# first argument is success message, second is failure one
+is_ok() {
+    if [ $? -eq 0 ]; then
+        if [ -n "$1" ]; then
+            logi "$1"
+        fi
+        return 0
+    else
+        if [ -n "$2" ]; then
+            loge "$2"
+        fi
+        return 1
+    fi
+}
+
+loge() {
+    echo "$Red[$(date)] [ERROR] : $1"
+}
+
+logi() {
+    echo "$White[$(date)] [INFO]  : $1"
+}
+
+restart_anx_service() {
+    am start-activity -S com.flomobility.anx.headless/com.flomobility.anx.activity.MainActivity
+}
+
+restart() {
+    delay_in_secs=3
+    sleep $delay_in_secs
+    reboot
+}
+
+shutdown() {
+    reboot -p
+}
+
+get_flo_os_version() {
+    getprop ro.lineage.version
+}
+
+start_logging() {
+    filename="/logs/$(date +%d-%m-%y:%H:%M:%S)"
+    logcat >> $filename &
+    logging_pid=$!
+}
+
+stop_logging() {
+    if [[ $logging_pid -ne -1 ]]; then
+        kill $logging_pid
+        wait
+        logging_pid=-1
+    fi
+}
+
+wifi_stats() {
+    wifi_info=$(dumpsys wifi | grep -o "mWifiInfo.*" | grep -o "SSID:.*BSSID:.*" | tr ',' '\n' | sed 's/^[[:space:]]*//')
+    ip_address=$(ip -o addr show | grep -E "wlan0" | awk '/inet/ {print $2, $3, $4}' | sed 's/wlan0 //g')
+    printf "%s\n%s\n" "$wifi_info" "$ip_address"
+}
+
+hotspot_stats() {
+    clients=$(ip neigh show dev wlan1 | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}')
+    if [[ -z "$clients" ]]; then
+        clients_count=0
+    else
+        clients_count=$(printf "%s\n" $clients | wc -l)
+    fi
+    printf "Clients : %s\n%s" $clients_count $clients
+}
+
+cellular_stats() {
+    raw_dump=$(dumpsys telephony.registry)
+    count=2
+    msg=""
+    for i in $( seq 1 $count )
+    do
+        selector=$(echo "$i""p")
+        raw_service_state_dump=$(echo "$raw_dump" | grep -E "mServiceState" | sed -n "$selector" | sed -n 's/^.*mServiceState={\(.*\)}.*$/\1/p' | sed -r ':a; s/(\[[^]]*)\,([^][]*\])/\1§\2/g; ta; s/,/\
+/g; s/§/,/g' | sed 's/^[[:space:]]*//')
+        stats=$(echo "$raw_service_state_dump" | grep -v -E "NetworkRegistrationInfo" | sed -E 's/^m([^a-z])/\1/g')
+        network_registration_info=$(echo "$raw_service_state_dump" | grep -E 'NetworkRegistrationInfo\{.*\}')
+        network_registration_info_count=$(echo "$network_registration_info" | wc -l)
+        for j in $( seq 1 $network_registration_info_count )
+        do
+            network_registration_stat_selector=$(echo "$j""p")
+            network_registration_stat=$(echo "$network_registration_info" | sed "s/mNetworkRegistrationInfos=\[//" | sed "s/}\]/}/" | sed -n "$network_registration_stat_selector" | sed 's/^[[:space:]]*//' | sed 's/ = /=/g' | sed 's/ :/:/g' | sed 's/android\.telephony\.[^[:space:]]*://g')
+            stats="$stats\n$network_registration_stat"
+        done
+        raw_signal_strength_dump=$(echo "$raw_dump" | grep -E "mSignalStrength" | sed -n "$selector" | tr '{},' '\n' | awk 'NR>1 {printf "  %s\n", $0}' | sed 's/^[[:space:]]*//')
+        key=$(echo "$raw_signal_strength_dump" | grep -o "primary=.*" | sed "s/.*primary=//")
+        signal_strength=$(echo "$raw_signal_strength_dump" | grep "$key" | head -1 | sed "s/.*$key: //")
+        txt="SIM $i : \n$stats\n$signal_strength\n"
+        if [ -z "$msg" ];then
+            msg="$txt"
+        else
+            msg="$msg\n$txt"
+        fi
+    done
+    response=$(echo -e "$msg\n")
+}
+
+set_recover_fs() {
+    echo -n 1 > /system/do_recovery
+}
+
+# function to delete the named pipe and exit the script
+cleanup() {
+    logi "Interrupt received"
+    rm $fifo_file
+    stop_logging
+    exit 0
+}
+
+# trap the SIGINT signal and call the cleanup function
+trap cleanup SIGINT
+
+fifo_file="/dev/socket/anx"
+
+# if it exists, delete it
+if [ -e $fifo_file ]
+then
+    rm $fifo_file
+fi
+
+# create fifo
+mkfifo $fifo_file
+ret=$?
+if [ $ret -ne 0 ]; then
+    loge "Error in creating fifo channel;"
+    exit $ret
+fi
+
+mount -o rw,remount /
+
+logi "Starting server on $fifo_file"
+logi "Waiting for requests ..."
+
+while true
+do
+    if [[ ! -e $fifo_file ]]; then
+        mkfifo $fifo_file
+    fi
+    
+    read -t 1 request < $fifo_file || continue
+    logi "Received : $request"
+
+    response="Empty"
+    case $request in
+        "RestartAnxService")
+            restart_anx_service
+            if [[ $? -eq 0 ]]; then
+                response="Error in restarting anx service"
+            fi
+            response="Restarted anx service"
+            ;;
+        "Shutdown")
+            response=$(shutdown)
+            ;;
+        "Reboot")
+            response="Rebooting in 3s ..."
+            restart &
+            ;;
+        "GetFloOsVersion")
+            response=$(get_flo_os_version)
+            ;;
+        "StartAndroidLogs")
+            start_logging
+            response="Logging on pid : $logging_pid"
+            ;;
+        "StopAndroidLogs")
+            stop_logging
+            response="Stopped logging"
+            ;;
+        "GetWifiStats")
+            response=$(wifi_stats)
+            ;;
+        "GetHotspotStats")
+            response=$(hotspot_stats)
+            ;;
+        "GetCellularStats")
+            cellular_stats
+            ;;
+        "RecoverFS")
+            set_recover_fs
+            response="Recovery ready. Rebooting in 3s ..."
+            restart &
+            ;;
+        "GetServerPid")
+            response=$my_pid
+            ;;
+        *)
+            # invalid RPC
+            response="Invalid RPC"
+            ;;
+    esac
+    echo -e "$response" > $fifo_file
+    response=""
+done
