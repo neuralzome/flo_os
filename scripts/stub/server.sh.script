@@ -120,7 +120,8 @@ set_recover_fs() {
 # function to delete the named pipe and exit the script
 cleanup() {
     logi "Interrupt received"
-    rm $fifo_file
+    rm $fifo_file_in
+    rm $fifo_file_out
     stop_logging
     exit 0
 }
@@ -128,34 +129,51 @@ cleanup() {
 # trap the SIGINT signal and call the cleanup function
 trap cleanup SIGINT
 
-fifo_file="/dev/socket/anx"
+fifo_file_in="/dev/socket/anx_in"
+fifo_file_out="/dev/socket/anx_out"
 
 # if it exists, delete it
-if [ -e $fifo_file ]
+if [ -e $fifo_file_in ]
 then
-    rm $fifo_file
+    rm $fifo_file_in
+fi
+
+if [ -e $fifo_file_out ]
+then
+    rm $fifo_file_out
 fi
 
 # create fifo
-mkfifo $fifo_file
+mkfifo $fifo_file_in
 ret=$?
 if [ $ret -ne 0 ]; then
-    loge "Error in creating fifo channel;"
+    loge "Error in creating fifo in channel;"
+    exit $ret
+fi
+
+mkfifo $fifo_file_out
+ret=$?
+if [ $ret -ne 0 ]; then
+    loge "Error in creating fifo out channel;"
     exit $ret
 fi
 
 mount -o rw,remount /
 
-logi "Starting server on $fifo_file"
+logi "Listening on $fifo_file_in. Responding on $fifo_file_out"
 logi "Waiting for requests ..."
 
 while true
 do
-    if [[ ! -e $fifo_file ]]; then
-        mkfifo $fifo_file
+    if [[ ! -e $fifo_file_in ]]; then
+        mkfifo $fifo_file_in
+    fi
+
+    if [[ ! -e $fifo_file_out ]]; then
+        mkfifo $fifo_file_out
     fi
     
-    read -t 1 request < $fifo_file || continue
+    read -t 1 request < $fifo_file_in || continue
     logi "Received : $request"
 
     response="Empty"
@@ -207,6 +225,6 @@ do
             response="Invalid RPC"
             ;;
     esac
-    echo -e "$response" > $fifo_file
+    echo -e "$response" > $fifo_file_out
     response=""
 done
