@@ -11,8 +11,8 @@
    ```bash
    pip install -r scripts/requirements.txt
    ```
-1. Flashing OS
-   
+### Tools
+1. Flash utility
    ```bash
    ./flash remote -wr 
    ```
