@@ -85,7 +85,7 @@ function bootup {
     done
 
     echo "Found /sdcard/linux.img after $COUNTER secs"
-    start_rpc_server
+    start_rpc_server >> /logs/anx_server.log 2>&1
     {LINUX_DEPLOY} mount
 
     # remove old ssh pid files if any
@@ -104,6 +104,38 @@ function bootup {
     am start -n com.flomobility.anx.headless/com.flomobility.anx.activity.MainActivity
 }
 
+MAX_LINES=5000
+prune_log_file() {
+    log_file=$1
+    lines=$(cat $log_file | wc -l)
+
+    if [[ $lines -lt $MAX_LINES ]];then
+        return 0
+    fi
+    logi "Max log file entries is $MAX_LINES. Found $lines. Proceeding to prune"
+    diff=$(($lines - $MAX_LINES))
+    echo "$(sed -e "1,${diff}d" $log_file)" > /logs/.new.log
+    stamp_occurrence=$(cat /logs/.new.log | grep -n "^-------------- .* --------------$" | head -1 | cut -d ":" -f 1)
+    if [[ $stamp_occurrence -eq 1 ]];then
+        return 0
+    fi
+    echo "$(sed -e "1,$(($stamp_occurrence - 1))d" /logs/.new.log)" > $log_file
+    rm /logs/.new.log
+    logi "Successfully pruned log file"
+}
+
+log_files=(
+    "bootup.log"
+    "anx_server.log"
+)
+
+clear_logs() {
+    for log_file in "${log_files[@]}"
+    do
+        prune_log_file $log_file
+    done
+}
+
 function cleanup {
    echo "Caught SIGINT"
    kill $pulse_vibrate_pid
@@ -114,7 +146,8 @@ trap cleanup SIGINT
 
 mount -o rw,remount /
 mkdir -p /logs
-echo "-------------- $(date) --------------" >> /logs/bootup.log
+clear_logs >> /logs/misc.log
+echo "-------------- $(date) --------------" | tee /logs/bootup.log /logs/anx_server.log > /dev/null
 check_recovery >> /logs/bootup.log 2>&1
 vibrate &
 bootup >> /logs/bootup.log 2>&1
