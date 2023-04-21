@@ -5,6 +5,12 @@
 
 ## Setting up a new device
 > This assumes the device is unlocked. Check [here](#unlock-phone) for more info.
+### Pre-requisities
+- Install Python 3.7+ on your PC
+- Be sure to run
+   ```bash
+   pip install -r scripts/requirements.txt
+   ```
 1. Flashing OS
    
    ```bash
