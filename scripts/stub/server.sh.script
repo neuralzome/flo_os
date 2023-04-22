@@ -218,9 +218,9 @@ do
         "GetCellularStats")
             cellular_stats
             ;;
-        "RecoverFS")
+        "ResetFs")
             set_recover_fs
-            response="1;Recovery ready. Rebooting in 3s ..."
+            response="1;Reset ready. Rebooting in 3s ..."
             restart &
             ;;
         # for debugging
