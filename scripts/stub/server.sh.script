@@ -48,6 +48,8 @@ restart() {
 }
 
 shutdown() {
+    delay_in_secs=3
+    sleep $delay_in_secs
     reboot -p
 }
 
@@ -186,46 +188,48 @@ do
             if [[ $? -eq 0 ]]; then
                 response="Error in restarting anx service"
             fi
-            response="Restarted anx service"
+            response="1;Restarted anx service"
             ;;
         "Shutdown")
-            response=$(shutdown)
+            response="1;Shutting down in 3s ..."
+            shutdown &
             ;;
         "Reboot")
-            response="Rebooting in 3s ..."
+            response="1;Rebooting in 3s ..."
             restart &
             ;;
         "GetFloOsVersion")
-            response=$(get_flo_os_version)
+            response="1;$(get_flo_os_version)"
             ;;
         "StartAndroidLogs")
             start_logging
-            response="Logging on pid : $logging_pid"
+            response="1;Started logging"
             ;;
         "StopAndroidLogs")
             stop_logging
-            response="Stopped logging"
+            response="1;Stopped logging"
             ;;
         "GetWifiStats")
-            response=$(wifi_stats)
+            response="1;$(wifi_stats)"
             ;;
         "GetHotspotStats")
-            response=$(hotspot_stats)
+            response="1;$(hotspot_stats)"
             ;;
         "GetCellularStats")
             cellular_stats
             ;;
         "RecoverFS")
             set_recover_fs
-            response="Recovery ready. Rebooting in 3s ..."
+            response="1;Recovery ready. Rebooting in 3s ..."
             restart &
             ;;
+        # for debugging
         "GetServerPid")
             response=$my_pid
             ;;
         *)
             # invalid RPC
-            response="Invalid RPC"
+            response="0;Invalid RPC"
             ;;
     esac
     echo -e "$response" > $fifo_file_out
