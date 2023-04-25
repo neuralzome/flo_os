@@ -453,7 +453,7 @@ def remote_setup(setup_fs, setup_ssh, secure_adb):
     create_boot_up_script(setup_ssh)
 
     # set it back to read-only fs
-    adb_shell("umount /")
+    adb_shell("mount -o ro,remount /")
 
     # locks the system
     if(secure_adb):
