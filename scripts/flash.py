@@ -27,6 +27,12 @@ from simple_term_menu import TerminalMenu
 
 import logger
 
+SCRIPT_DIR=os.path.abspath(os.path.dirname(__file__))
+CACHE_DIR=""
+if os.path.islink(__file__):
+    CACHE_DIR=f"{SCRIPT_DIR}/builds"
+else:
+    CACHE_DIR=f"{SCRIPT_DIR}/../builds"
 
 PLATFORM_TOOLS_VERSION = "r34.0.0"
 PLATFORM = platform.uname().system.lower()
@@ -91,14 +97,14 @@ def check_platform_tools():
 
 
 def populate_and_select_os_versions():
-    if not os.path.exists("builds"):
-        os.mkdir("builds")
+    if not os.path.exists(CACHE_DIR):
+        os.mkdir(CACHE_DIR)
 
     s3.download_file(
         Bucket=FLO_OS_RELEASES_BUCKET_NAME,
         Key="manifest",
-        Filename="builds/manifest")
-    with open('builds/manifest') as f:
+        Filename=f"{CACHE_DIR}/manifest")
+    with open(f'{CACHE_DIR}/manifest') as f:
         versions = f.read()
         versions = versions.rstrip().split("\n")
     terminal_menu = TerminalMenu(
@@ -110,7 +116,7 @@ def populate_and_select_os_versions():
 
 def check_for_local_build(version):
     file_name = f"{version}.zip"
-    return os.path.isfile(f"builds/{file_name}")
+    return os.path.isfile(f"{CACHE_DIR}/{file_name}")
 
 
 def download_flo_build(version):
@@ -134,7 +140,7 @@ def download_flo_build(version):
         s3.download_file(
             Bucket=FLO_OS_RELEASES_BUCKET_NAME,
             Key=file_name,
-            Filename=f'builds/{file_name}',
+            Filename=f'{CACHE_DIR}/{file_name}',
             Callback=progress)
     logger.info(f'Done.')
 
@@ -286,10 +292,9 @@ def factory_reset():
 @click.command(name="clean")
 def cleanup():
     """Clears builds directory"""
-    if os.path.exists("builds"):
-        build_dir = os.path.abspath("builds")
-        logger.info(f"Deleting {build_dir} ...")
-        shutil.rmtree("builds")
+    if os.path.exists(CACHE_DIR):
+        logger.info(f"Deleting {CACHE_DIR} ...")
+        shutil.rmtree(CACHE_DIR)
         logger.info("Done.")
 
 
@@ -339,7 +344,7 @@ def flash_remote(wipe, reboot):
         sys.exit(1)
 
     # Flash Flo build via fastboot
-    file_name = f"builds/{version}.zip"
+    file_name = f"{CACHE_DIR}/{version}.zip"
     success = flash_flo_build(file_name, wipe)
     if success and reboot:
         fastboot("reboot")
