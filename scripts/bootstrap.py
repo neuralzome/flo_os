@@ -145,14 +145,14 @@ def install_magisk():
 def download_anx_apk():
     file_name = f"{ANX}.apk"
     logger.info("Downloading anx ...")
-    local_magisk = f"{LOCAL_SETUP_DIR}/{file_name}"
-    if os.path.isfile(local_magisk):
+    local_anx = f"{LOCAL_SETUP_DIR}/{file_name}"
+    if os.path.isfile(local_anx):
         logger.info("Using cache.")
         return
     s3.download_file(
         Bucket=FLO_OS_SETUP_BUCKET_NAME,
         Key=file_name,
-        Filename=local_magisk)
+        Filename=local_anx)
     logger.info("Done.")
 
 def install_anx():

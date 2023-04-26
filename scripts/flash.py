@@ -173,10 +173,10 @@ def flash_flo_build(file_name, wipe) -> bool:
                               f'Expand-Archive -Path {file_name} -DestinationPath .\\{dir_name}'], capture_output=True)
     else:
         ret = subprocess.run(
-            ['unzip', "-o", file_name, f"-d{dir_name}"], capture_output=True)
+            ['unzip', "-o", file_name, f"-d{dir_name}"])
 
     if ret.returncode != 0:
-        logger.error(ret.stderr.decode())
+        logger.error(f"Error in unzipping {file_name}")
         sys.exit(ret.returncode)
     
     logger.info("Done")
@@ -191,6 +191,12 @@ def flash_flo_build(file_name, wipe) -> bool:
             if ret.returncode != 0:
                 logger.error(
                     f"Failed flashing {partition_name} : {ret.stderr.decode()}")
+
+    # clean up
+    if os.path.exists(dir_name):
+        logger.info(f"Cleaning up ...")
+        shutil.rmtree(dir_name)
+        logger.info("Done.")
 
     return True
 
