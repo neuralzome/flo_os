@@ -85,8 +85,8 @@ function bootup {
     done
 
     echo "Found /sdcard/linux.img after $COUNTER secs"
-    start_rpc_server >> /logs/anx_server.log 2>&1
     {LINUX_DEPLOY} mount
+    start_rpc_server >> /logs/anx_server.log 2>&1
 
     # remove old ssh pid files if any
     if [[ -f /data/local/mnt/run/sshd.pid ]]; then

@@ -11,7 +11,7 @@ White='\033[0;37m'        # White
 my_pid=$$
 logging_pid=-1
 
-LOGS_DIR="/data/local/mnt/.logs/system"
+LOGS_DIR="/data/local/mnt/root/.logs/system"
 mkdir -p $LOGS_DIR
 
 # first argument is success message, second is failure one
@@ -58,6 +58,8 @@ get_flo_os_version() {
 }
 
 start_logging() {
+    mkdir -p $LOGS_DIR
+    stop_logging
     filename="$LOGS_DIR/$(date +%d-%m-%y:%H:%M:%S)"
     logcat >> $filename &
     logging_pid=$!
