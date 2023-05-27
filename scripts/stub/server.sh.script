@@ -80,13 +80,8 @@ wifi_stats() {
 }
 
 hotspot_stats() {
-    clients=$(ip neigh show dev wlan1 | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}')
-    if [[ -z "$clients" ]]; then
-        clients_count=0
-    else
-        clients_count=$(printf "%s\n" $clients | wc -l)
-    fi
-    printf "Clients : %s\n%s" $clients_count $clients
+    stats=$(dumpsys wifi | sed -n '/\*\*\*\*\*\*/,$p' | sed '1d')
+    echo "$stats"
 }
 
 cellular_stats() {
