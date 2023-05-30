@@ -44,19 +44,7 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME")
 
 FLO_OS_RELEASES_BUCKET_NAME = "flo-os-release-bundles"
-
-if AWS_ACCESS_KEY_ID == None or AWS_SECRET_ACCESS_KEY == None or AWS_S3_REGION_NAME == None:
-    logger.error(
-        "Missing aws configuration. Check your env variables for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME")
-    sys.exit(1)
-
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-    region_name=AWS_S3_REGION_NAME)
-
-BUCKET_NAME = "flo-os-release-builds"
+s3 = None
 
 if PLATFORM == "windows":
     FASTBOOT = f"{PLATFORM_TOOLS_PATH}\\fastboot.exe"
@@ -68,6 +56,13 @@ else:
 
 def fastboot(cmd, *args):
     return subprocess.run([FASTBOOT, cmd] + list(args))
+
+
+def check_aws_credentials():
+    if AWS_ACCESS_KEY_ID == None or AWS_SECRET_ACCESS_KEY == None or AWS_S3_REGION_NAME == None:
+        logger.error(
+            "Missing aws configuration. Check your env variables for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME")
+        sys.exit(1)
 
 
 def download_file(url, filename):
@@ -333,6 +328,15 @@ def flash_local(wipe, reboot, os_zip_file):
 @click.option('--reboot', '-r', is_flag=True, help='Reboots after opertation is succesful')
 def flash_remote(wipe, reboot):
     """Download and flash a version of Flo OS"""
+
+    check_aws_credentials()
+
+    global s3
+    s3 = boto3.client(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=AWS_S3_REGION_NAME)
 
     # Download platform tools
     check_platform_tools()

@@ -22,6 +22,7 @@ import alive_progress as alive
 from simple_term_menu import TerminalMenu
 
 import logger
+from utils import AdbException
 
 VERSION = "v0.1.0"
 
@@ -55,12 +56,7 @@ ADB_SETUP = "adb_keys"
 if AWS_ACCESS_KEY_ID == None or AWS_SECRET_ACCESS_KEY == None or AWS_S3_REGION_NAME == None:
     logger.error("Missing aws configuration. Check your env variables for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME")
     sys.exit(1)
-
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-    region_name=AWS_S3_REGION_NAME)
+s3 = None
 
 MAGISK = "magisk"
 ANX = "anx"
@@ -105,11 +101,11 @@ def adb_shell(cmd, *args):
         if ret.returncode == 0:
             return True
         else:
-            logger.error(ret.stderr.decode())
-            exit(ret.returncode)
+            raise AdbException(error_code=ret.returncode, message=ret.stderr.decode().rstrip())
     except Exception as e:
-        logger.error(f"Error in executing adb command : {e}")
-        exit(ret.returncode)
+        logger.error(f"Error in executing adb command : {e.message}")
+        logger.error(f"Exiting with code - {e.error_code}")
+        exit(e.error_code)
 
 def adb(cmd, *args):
     try:
@@ -117,11 +113,17 @@ def adb(cmd, *args):
         if ret.returncode == 0:
             return True
         else:
-            logger.error(ret.stderr.decode())
-            exit(ret.returncode)
-    except Exception as e:
-        logger.error(f"Error in executing adb command : {e}")
-        exit(ret.returncode)
+            raise AdbException(error_code=ret.returncode, message=ret.stderr.decode().rstrip())
+    except AdbException as e:
+        logger.error(f"Error in executing adb command : {e.message}")
+        logger.error(f"Exiting with code - {e.error_code}")
+        exit(e.error_code)
+
+def check_aws_credentials():
+    if AWS_ACCESS_KEY_ID == None or AWS_SECRET_ACCESS_KEY == None or AWS_S3_REGION_NAME == None:
+        logger.error(
+            "Missing aws configuration. Check your env variables for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME")
+        sys.exit(1)
 
 def download_magisk_apk():
     file_name = f"{MAGISK}.apk"
@@ -334,6 +336,16 @@ def exit(return_code):
     sys.exit(return_code)
 
 def pre_setup():
+
+    check_aws_credentials()
+
+    global s3
+    s3 = boto3.client(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=AWS_S3_REGION_NAME)
+
     # Download platform tools
     check_platform_tools()
 
@@ -416,6 +428,12 @@ def remote_setup(setup_fs, setup_ssh, secure_adb):
 
     - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_REGION_NAME env variables sourced
     """
+
+    # flags default to false when not set
+    if not setup_fs and not setup_ssh and not secure_adb:
+        ctx = click.get_current_context()
+        click.echo(ctx.get_help())
+        sys.exit(0)
     
     pre_setup()
     
