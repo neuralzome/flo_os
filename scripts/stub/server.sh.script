@@ -73,6 +73,14 @@ stop_logging() {
     fi
 }
 
+connect_wifi() {
+    svc wifi enable
+}
+
+disconnect_wifi() {
+    svc wifi disable
+}
+
 wifi_stats() {
     wifi_info=$(dumpsys wifi | grep -o "mWifiInfo.*" | grep -o "SSID:.*BSSID:.*" | tr ',' '\n' | sed 's/^[[:space:]]*//')
     ip_address=$(ip -o addr show | grep -E "wlan0" | awk '/inet/ {print $2, $3, $4}' | sed 's/wlan0 //g')
@@ -205,6 +213,14 @@ do
         "StopAndroidLogs")
             stop_logging
             response="1;Stopped logging"
+            ;;
+        "ConnectWifi")
+            connect_wifi
+            response="1;Connecting to wifi. Check in a few seconds"
+            ;;
+        "DisconnectWifi")
+            disconnect_wifi
+            response="1;Disconnected from wifi network"
             ;;
         "GetWifiStats")
             response="1;$(wifi_stats)"
