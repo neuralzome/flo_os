@@ -84,6 +84,8 @@ function bootup {
         ((COUNTER++))
     done
 
+    am start -W com.flomobility.anx.headless/com.flomobility.anx.activity.MainActivity
+
     echo "Found /sdcard/linux.img after $COUNTER secs"
     {LINUX_DEPLOY} mount
     start_rpc_server >> /logs/anx_server.log 2>&1
@@ -99,9 +101,7 @@ function bootup {
     ps -A | grep ssh
 
     # start adb over wifi
-    setprop service.adb.tcp.port 5555
-    
-    am start -n com.flomobility.anx.headless/com.flomobility.anx.activity.MainActivity
+    setprop service.adb.tcp.port 5555   
 }
 
 MAX_LINES=5000
